@@ -471,7 +471,12 @@
             document.getElementById('pArea').innerText = Math.round(props.total_area_sqm) + " m²";
 
             // Handle missing data gracefully
-            const slope = props.slope_mean ? Math.round(props.slope_mean) + " m" : "N/A";
+            let slope = "N/A";
+            if (props.slope_mean != null) {
+                const pct = Math.round(props.slope_mean);
+                const deg = Math.round(Math.atan(props.slope_mean / 100) * (180 / Math.PI));
+                slope = `${pct}% (${deg}°)`;
+            }
             const build = props.buildable_area_sqm ? Math.round(props.buildable_area_sqm) + " m²" : "Unknown";
             const owner = props.owner_name ? props.owner_name : "Private (Upload CSV)";
 
@@ -739,7 +744,9 @@
                     btn.innerHTML = "<div class='loader w-4 h-4 border-2 border-white border-t-transparent animate-spin ml-2'></div> Calculating Buildable Area...";
 
                     // Update Slope
-                    document.getElementById('pSlope').innerText = json.slope + "% (Agent)";
+                    const slopePct = json.slope;
+                    const slopeDeg = Math.round(Math.atan(slopePct / 100) * (180 / Math.PI));
+                    document.getElementById('pSlope').innerText = `${slopePct}% (${slopeDeg}°)`;
 
                     // 2. Client Analysis (Zoning Intersection)
                     // We need the geometry of the parcel. checking parcelsData
@@ -755,7 +762,31 @@
                         feature.properties.owner_email = json.owner_email;
 
                         // Force update UI
-                        if (json.address) document.getElementById('pEnrichment').innerHTML = "";
+                        const encDiv = document.getElementById('pEnrichment');
+                        encDiv.innerHTML = "";
+
+                        if (json.address) {
+                            encDiv.innerHTML += `
+                                <div class="flex flex-col">
+                                    <span class="text-gray-400 text-xs uppercase">📍 Address</span>
+                                    <span class="text-white text-sm">${json.address}</span>
+                                </div>`;
+                        }
+                        if (json.dist_to_hub) {
+                            encDiv.innerHTML += `
+                                <div class="flex flex-col">
+                                    <span class="text-gray-400 text-xs uppercase">🚡 Distance to Hub</span>
+                                    <span class="text-white text-sm">${json.dist_to_hub}m to Olympe</span>
+                                </div>`;
+                        }
+                        if (json.est_price_m2) {
+                            const totalEst = (json.est_price_m2 * feature.properties.total_area_sqm) / 1000;
+                            encDiv.innerHTML += `
+                                <div class="flex flex-col">
+                                    <span class="text-gray-400 text-xs uppercase">💰 Est. Market Price</span>
+                                    <span class="text-green-400 text-sm font-bold">€${json.est_price_m2}/m² (~€${Math.round(totalEst)}k)</span>
+                                </div>`;
+                        }
 
                         const zoning = await fetchZoningIntersection(feature);
                         let buildHtml = "<span class='text-gray-400'>Unknown</span>"; // Default
