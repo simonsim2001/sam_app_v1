@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Land Research: Brides-les-Bains</title>
+
+    <!-- MapLibre GL JS -->
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Turf.js for Geospatial Analysis -->
+    <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+
+    <!-- Driver.js for Tour -->
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        /* Driver JS customization */
+        .driver-popover.driverjs-theme {
+            background-color: #1e293b;
+            color: white;
+            border: 1px solid #334155;
+        }
+
+        .driver-popover-title {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .driver-popover-description {
+            font-size: 14px;
+            color: #cbd5e1;
+        }
+
+        .driver-popover-close-btn {
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-white overflow-hidden font-sans">
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- UI Overlay: Sidebar -->
+    <div id="sidebar" class="absolute top-4 left-4 w-80 z-20 flex flex-col gap-4 pointer-events-none"
+        style="max-height: calc(100vh - 2rem);">
+
+        <!-- CONTROL BUTTONS TOP -->
+        <div class="flex gap-2 pointer-events-auto shrink-0">
+            <button onclick="document.getElementById('welcomeModal').classList.remove('hidden')"
+                class="bg-gray-800/80 hover:bg-gray-700 text-white p-2 rounded-lg backdrop-blur-sm border border-white/10 text-xs flex items-center gap-1">
+                <span>👋</span> Help / Tour
+            </button>
+        </div>
+
+        <!-- Main Panel -->
+        <div id="parcelInfoPanel"
+            class="bg-gray-900/90 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 overflow-hidden pointer-events-auto flex flex-col min-h-0">
+            <!-- Header -->
+            <div class="p-6 border-b border-white/10 shrink-0">
+                <h1
+                    class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                    Land Research
+                </h1>
+                <p class="text-xs text-gray-400 mt-1 uppercase tracking-widest">Brides-les-Bains</p>
+            </div>
+
+            <!-- Stats / Filters -->
+            <div class="p-6 space-y-6 overflow-y-auto flex-1">
+
+                <!-- Stats Row -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-800/50 p-4 rounded-xl text-center">
+                        <div class="text-2xl font-bold text-blue-400" id="totalParcelCount">-</div>
+                        <div class="text-xs text-gray-500 uppercase">Parcels</div>
+                    </div>
+                    <div class="bg-gray-800/50 p-4 rounded-xl text-center">
+                        <div class="text-2xl font-bold text-purple-400" id="avgSize">0</div>
+                        <div class="text-xs text-gray-500 uppercase">Avg Size (m²)</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <label class="text-sm font-medium text-gray-300">Min Size (m²)</label>
+                        <span class="text-xs text-blue-400 font-mono" id="sizeVal">0</span>
+                    </div>
+                    <input type="range" id="sizeFilter" min="0" max="10000" value="0" step="100"
+                        class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+
+
+                <!-- Selected Parcel Info -->
+                <div id="parcelInfo" class="hidden animate-fade-in pt-4 border-t border-white/10">
+                    <h3 class="text-lg font-semibold text-white mb-3">Selected Plot</h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">ID</span>
+                            <span class="font-mono text-white" id="pId">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Area</span>
+                            <span class="font-mono text-white" id="pArea">-- m²</span>
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <span class="text-gray-400 text-xs uppercase tracking-wider">Buildable Status</span>
+                            <div class="font-mono text-sm break-words" id="pBuild">--</div>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Est. Slope</span>
+                            <span class="font-mono text-green-400" id="pSlope">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Owner</span>
+                            <span class="font-mono text-blue-400" id="pOwner">--</span>
+                        </div>
+                        <div class="pt-2 border-t border-white/5 space-y-2" id="pEnrichment">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Agent Button -->
+                    <button id="btnAgent"
+                        class="mt-4 w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-lg text-sm font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 group">
+                        <span>✨ Ask Agent to Analyze</span>
+                    </button>
+
+                    <!-- RECOMMENDATION BUTTON -->
+                    <button onclick="openRecModal()" id="recModalBtn"
+                        class="mt-4 w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg text-sm font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 group">
+                        <span>🎯 Find Best Land</span>
+                    </button>
+
+                    <!-- Copy Info Button (Hidden by default) -->
+                    <button id="btnCopyRequest"
+                        class="hidden mt-2 w-full py-2 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 border border-gray-600 flex items-center justify-center gap-2">
+                        📋 Copy Official Request Letter
+                    </button>
+
+                    <button
+                        class="mt-4 w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-semibold transition-colors"
+                        onclick="resetSelection()">
+                        Clear Selection
+                    </button>
+                </div>
+
+                <div id="emptyState" class="text-center py-10 text-gray-500 text-sm">
+                    Hover or click a parcel to view details.
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 bg-black/20 text-xs text-center text-gray-600">
+                Data sources: Cadastre Etalab, IGN
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loader"
+        class="absolute inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="loader mb-4 border-t-purple-500"></div>
+        <p class="text-gray-400 text-sm tracking-wider">LOADING GEOSPATIAL DATA</p>
+    </div>
+
+    <!-- WELCOME MODAL -->
+    <div id="welcomeModal"
+        class="hidden absolute inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div
+            class="bg-gray-900 border border-purple-500/30 rounded-2xl w-full max-w-2xl p-8 shadow-2xl relative text-center">
+            <button onclick="closeWelcomeModal()"
+                class="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
+            <div
+                class="w-16 h-16 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-lg shadow-purple-500/20">
+                <span class="text-3xl">🏔️</span>
+            </div>
+
+            <h1 class="text-3xl font-bold text-white mb-2">Welcome to Land Agent AI</h1>
+            <p class="text-gray-400 mb-8 max-w-lg mx-auto">Your intelligent assistant for discovering buildable land in
+                the French Alps. Analyze slopes, estimate prices, and find hidden gems.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 text-left">
+                <div class="bg-gray-800/50 p-4 rounded-xl border border-white/5">
+                    <div class="text-purple-400 font-bold mb-1">🔍 Smart Analysis</div>
+                    <div class="text-xs text-gray-400">Instant evaluation of buildable area, slope, and elevation for
+                        any parcel.</div>
+                </div>
+                <div class="bg-gray-800/50 p-4 rounded-xl border border-white/5">
+                    <div class="text-emerald-400 font-bold mb-1">💰 Price Estimation</div>
+                    <div class="text-xs text-gray-400">Live market data from DVF government records to estimate fair
+                        value.</div>
+                </div>
+                <div class="bg-gray-800/50 p-4 rounded-xl border border-white/5">
+                    <div class="text-blue-400 font-bold mb-1">🎯 Recommendations</div>
+                    <div class="text-xs text-gray-400">Tell us what you want, and the Agent will proactively find the
+                        best matches.</div>
+                </div>
+            </div>
+
+            <div class="flex gap-4 justify-center">
+                <button onclick="startTour()"
+                    class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-lg font-bold text-white shadow-lg transition-transform hover:scale-105">
+                    🚀 Start Live Tour
+                </button>
+                <button onclick="closeWelcomeModal()"
+                    class="px-6 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg font-semibold text-gray-300">
+                    Skip
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RECOMMENDATION MODAL -->
+    <div id="recModal"
+        class="hidden absolute inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onclick="closeRecModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
+
+            <h2 class="text-xl font-bold text-white mb-1">Find Best Land</h2>
+            <p class="text-xs text-gray-400 mb-6">Enter your project specs to find recommendations.</p>
+
+            <div class="space-y-4">
+                <!-- Project Type Removed -->
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Min Area (m²)</label>
+                        <input type="number" id="recMinArea" value="500"
+                            class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Max Area (m²)</label>
+                        <input type="number" id="recMaxArea" placeholder="Unlimited"
+                            class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Max Slope (%)</label>
+                        <input type="number" id="recMaxSlope" value="30"
+                            class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-400 mb-1">Est. Buildable % (Default)</label>
+                        <input type="number" id="recEstPercent" value="80"
+                            class="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm">
+                    </div>
+                </div>
+
+                <button onclick="findBestLands()"
+                    class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg text-sm font-bold text-white shadow-lg mt-4">
+                    🔍 Find Top Matches
+                </button>
+                <div id="recStatus" class="text-xs text-center text-blue-400 h-4 mt-1 font-mono animate-pulse"></div>
+            </div>
+
+            <!-- RESULTS LIST -->
+            <div id="recResults" class="mt-6 space-y-2 max-h-40 overflow-y-auto hidden">
+                <!-- Items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Init Map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'satellite': {
+                        type: 'raster',
+                        tiles: [
+                            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                        ],
+                        tileSize: 256,
+                        attribution: '&copy; Esri'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'satellite-layer',
+                        type: 'raster',
+                        source: 'satellite',
+                        paint: {}
+                    }
+                ]
+            },
+            center: [6.57, 45.45], // Brides-les-Bains approx
+            zoom: 14,
+            pitch: 45,
+            bearing: -20,
+            antialias: true
+        });
+
+        map.addControl(new maplibregl.NavigationControl({ visualVisualizePitch: true }), 'top-right');
+
+        let parcelsData = null;
+        let analysisQueue = [];
+        let isAnalyzing = false;
+
+        map.on('load', () => {
+            loadData();
+        });
+
+        function loadData() {
+            // Fetch GeoJSON (with cache busting)
+            fetch('./data/analysis_73057.geojson?t=' + new Date().getTime())
+                .then(response => {
+                    if (!response.ok) throw new Error("Failed to load data");
+                    return response.json();
+                })
+                .then(data => {
+                    parcelsData = data;
+                    if (map.getSource('parcels')) {
+                        map.getSource('parcels').setData(data); // update existing
+                        updateStats(data);
+                    } else {
+                        initData(data); // first load
+                    }
+                })
+                .catch(err => {
+                    console.error("Error loading data:", err);
+                    document.getElementById('loader').innerHTML = "<p class='text-red-500'>Failed to load data.</p>";
+                });
+        }
+
+        function updateStats(data) {
+            document.getElementById('totalParcelCount').innerText = data.features.length;
+            const avg = data.features.reduce((acc, f) => acc + (f.properties.total_area_sqm || 0), 0) / data.features.length;
+            document.getElementById('avgSize').innerText = Math.round(avg);
+        }
+
+        function initData(data) {
+            updateStats(data);
+
+            // Add Source
+            map.addSource('parcels', {
+                type: 'geojson',
+                data: data
+            });
+
+            // Add Fill Layer
+            map.addLayer({
+                'id': 'parcels-fill',
+                'type': 'fill',
+                'source': 'parcels',
+                'paint': {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'total_area_sqm'],
+                        0, '#3b82f6',    // Blue for small
+                        1000, '#8b5cf6', // Purple
+                        5000, '#ec4899'  // Pink for huge
+                    ],
+                    'fill-opacity': 0.4,
+                    'fill-outline-color': 'rgba(255,255,255,0.5)'
+                }
+            });
+
+            // Add Line Layer (Outlines for sharpness)
+            map.addLayer({
+                'id': 'parcels-line',
+                'type': 'line',
+                'source': 'parcels',
+                'paint': {
+                    'line-color': '#fff',
+                    'line-width': 1,
+                    'line-opacity': 0.3
+                }
+            });
+
+            // Highlight Layer
+            map.addLayer({
+                'id': 'parcels-highlight',
+                'type': 'line',
+                'source': 'parcels',
+                'filter': ['==', 'id', ''],
+                'paint': {
+                    'line-color': '#fde047',
+                    'line-width': 3
+                }
+            });
+
+            // Fit bounds
+            // Simple bound calculation since maplibre needs explicit LngLatBounds
+            const coords = data.features[0].geometry.coordinates[0][0]; // naive start
+            map.jumpTo({ center: coords, zoom: 15 });
+
+            // Hide loader
+            setTimeout(() => {
+                document.getElementById('loader').style.opacity = '0';
+                setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
+            }, 1000);
+
+            setupInteractions();
+        }
+
+        function setupInteractions() {
+            // Hover cursor
+            map.on('mouseenter', 'parcels-fill', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+            map.on('mouseleave', 'parcels-fill', () => {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // Click
+            map.on('click', 'parcels-fill', (e) => {
+                const feature = e.features[0];
+                selectParcel(feature);
+            });
+
+            // Filter Logic
+            document.getElementById('sizeFilter').addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                document.getElementById('sizeVal').innerText = val + "+";
+
+                map.setFilter('parcels-fill', ['>=', 'total_area_sqm', val]);
+                map.setFilter('parcels-line', ['>=', 'total_area_sqm', val]);
+            });
+
+            // Recommendation Live Updates
+            // Recommendation Live Updates
+            document.getElementById('recMinArea').addEventListener('input', () => findBestLands(true));
+            document.getElementById('recMaxArea').addEventListener('input', () => findBestLands(true));
+            document.getElementById('recMaxSlope').addEventListener('input', () => findBestLands(true));
+            document.getElementById('recEstPercent').addEventListener('input', () => {
+                // Might need to update current selection too if open?
+                // For now just update search
+            });
+        }
+
+        function selectParcel(feature) {
+            clearCopyBtn();
+            const props = feature.properties;
+
+            // Highlight map
+            map.setFilter('parcels-highlight', ['==', 'id', props.id]);
+
+            // Update UI
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('parcelInfo').classList.remove('hidden');
+
+            document.getElementById('pId').innerText = props.id;
+            document.getElementById('pArea').innerText = Math.round(props.total_area_sqm) + " m²";
+
+            // Handle missing data gracefully
+            const slope = props.slope_mean ? Math.round(props.slope_mean) + " m" : "N/A";
+            const build = props.buildable_area_sqm ? Math.round(props.buildable_area_sqm) + " m²" : "Unknown";
+            const owner = props.owner_name ? props.owner_name : "Private (Upload CSV)";
+
+            document.getElementById('pSlope').innerText = slope;
+            document.getElementById('pBuild').innerText = build;
+            document.getElementById('pOwner').innerText = owner;
+
+            // Handle Enrichment Data
+            const encDiv = document.getElementById('pEnrichment');
+            encDiv.innerHTML = "";
+
+            if (props.address) {
+                encDiv.innerHTML += `
+                    <div class="flex flex-col">
+                        <span class="text-gray-400 text-xs uppercase">📍 Address</span>
+                        <span class="text-white text-sm">${props.address}</span>
+                    </div>`;
+            }
+            if (props.dist_to_hub) {
+                encDiv.innerHTML += `
+                    <div class="flex flex-col">
+                        <span class="text-gray-400 text-xs uppercase">🚡 Distance to Hub</span>
+                        <span class="text-white text-sm">${props.dist_to_hub}m to Olympe</span>
+                    </div>`;
+            }
+            if (props.est_price_m2) {
+                const total = Math.round((props.est_price_m2 * props.total_area_sqm) / 1000);
+                encDiv.innerHTML += `
+                    <div class="flex flex-col">
+                        <span class="text-gray-400 text-xs uppercase">💰 Est. Market Price</span>
+                        <span class="text-green-400 text-sm font-bold">€${props.est_price_m2}/m² (~€${total}k)</span>
+                        <span class="text-[10px] text-gray-500">Based on DVF sales < 1km</span>
+                    </div>`;
+            }
+
+            // setup Agent Button
+            const btn = document.getElementById('btnAgent');
+            btn.onclick = () => askAgent(props.id);
+
+            // Allow re-processing (Always enabled)
+            if (props.slope_mean != null && props.slope_mean !== "N/A") {
+                btn.innerHTML = "<span>🔄 Re-Analyze with Agent</span>";
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                btn.innerHTML = "<span>✨ Ask Agent to Analyze</span>";
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function resetSelection() {
+            map.setFilter('parcels-highlight', ['==', 'id', '']);
+            document.getElementById('emptyState').classList.remove('hidden');
+            document.getElementById('parcelInfo').classList.add('hidden');
+        }
+
+        async function fetchZoningIntersection(parcelFeature) {
+            const bbox = turf.bbox(parcelFeature);
+            // Expand BBOX slightly 
+            const s = bbox[1] - 0.001;
+            const w = bbox[0] - 0.001;
+            const n = bbox[3] + 0.001;
+            const e = bbox[2] + 0.001;
+
+            // NEW URL: Geoplateforme
+            const wfsBase = "https://data.geopf.fr/wfs/ows";
+
+            // Sanitize params
+            const sW = w.toFixed(6);
+            const sS = s.toFixed(6);
+            const sE = e.toFixed(6);
+            const sN = n.toFixed(6);
+
+            // WFS 2.0.0 Params
+            const params = new URLSearchParams({
+                'service': 'WFS',
+                'version': '2.0.0',
+                'request': 'GetFeature',
+                'typeName': 'wfs_du:zone_urba', // Correct Typename for new Global GPU layer
+                'outputFormat': 'json',
+                'srsName': 'EPSG:4326',
+                // FIX: Geoplateforme WFS 2.0 with EPSG:4326 seems to want LON,LAT order based on debug script
+                // even though spec often says otherwise. We trust the debug script result (Found 35 features).
+                'bbox': `${sW},${sS},${sE},${sN},EPSG:4326`
+            });
+
+            // Re-enable Proxy (corsproxy.io) to ensure no CORS blocking on new URL
+            const targetUrl = `${wfsBase}?${params.toString()}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+            try {
+                console.log("Fetching Geoplateforme via Proxy:", proxyUrl);
+                const res = await fetch(proxyUrl);
+
+                if (!res.ok) {
+                    const txt = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${txt.substring(0, 100)}`);
+                }
+
+                const data = await res.json();
+
+                // --- HEURISTIC FALLBACK ---
+                // If WFS returns no data, we ESTIMATE based on Slope/Location.
+                if (!data.features || data.features.length === 0) {
+                    console.warn("WFS Empty - Using Heuristic");
+                    // Heuristic: If Slope < 30%, assume constructible for now (Client Request for Estimation)
+                    // In reality, this should be "Possible", but user asked for "Estimations"
+                    const slope = parcelFeature.properties.slope_mean || 0;
+                    const isLikely = slope < 30;
+
+                    const estPct = parseFloat(document.getElementById('recEstPercent').value) || 80;
+                    const factor = estPct / 100.0;
+
+                    const estArea = isLikely ? Math.round(parcelFeature.properties.total_area_sqm * factor) : 0;
+
+                    return {
+                        isBuildable: isLikely,
+                        buildableAreaSqm: estArea,
+                        zone: "Estimated",
+                        labels: "Inferred from Terrain (WFS Missing)",
+                        debugKeys: "WFS Empty - Heuristic Applied"
+                    };
+                }
+
+                // Debug keys
+                let availableKeys = "None";
+                if (data.features.length > 0) {
+                    availableKeys = Object.keys(data.features[0].properties).join(", ");
+                }
+
+                let totalBuildableArea = 0;
+                let primaryZone = "Unknown";
+                let allZones = new Set();
+
+                let parcelPoly = parcelFeature;
+                if (parcelFeature.geometry.type === "MultiPolygon") {
+                    parcelPoly = turf.polygon(parcelFeature.geometry.coordinates[0]);
+                }
+
+                for (const zoneFeat of data.features) {
+                    // FIX: WFS 2.0 might return Lat,Lon order (EPSG:4326) even in GeoJSON.
+                    // Check first coordinate. Brides-les-Bains: Lon ~6.5, Lat ~45.5.
+                    // If [0] > 40, it's flipped.
+                    let geometry = zoneFeat.geometry;
+                    if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+                        const p = geometry.type === "Polygon" ? geometry.coordinates[0][0] : geometry.coordinates[0][0][0];
+                        if (p && p[0] > 40 && p[1] < 10) {
+                            // Flip needed. Using Turf 'coordEach' or simple manual map would be best but let's try a simple re-mapping if it's just Polygon.
+                            // Actually, let's just use turf.flip if available or manual.
+                            // Manual Deep Swap for Polygon/MultiPolygon
+                            const flipRing = ring => ring.map(c => [c[1], c[0]]);
+                            if (geometry.type === "Polygon") {
+                                geometry.coordinates = geometry.coordinates.map(flipRing);
+                            } else if (geometry.type === "MultiPolygon") {
+                                geometry.coordinates = geometry.coordinates.map(poly => poly.map(flipRing));
+                            }
+                        }
+                    }
+
+                    const props = zoneFeat.properties;
+
+                    // Helper
+                    const getProp = (keys) => {
+                        for (const k of keys) {
+                            if (props[k] !== undefined) return props[k];
+                            if (props[k.toUpperCase()] !== undefined) return props[k.toUpperCase()];
+                            if (props[k.toLowerCase()] !== undefined) return props[k.toLowerCase()];
+                        }
+                        return null;
+                    };
+
+                    const type = getProp(['typezone', 'TYPEZONE', 'libelle', 'LIBELLE']);
+                    const label = getProp(['libelle', 'LIBELLE', 'libelong']);
+
+                    if (!type) continue;
+
+                    if (["U", "AU", "Urbain", "A urbaniser"].some(t => type.includes(t))) {
+                        try {
+                            const intersection = turf.intersect(parcelPoly, zoneFeat); // zoneFeat now has Potentially Flipped Geometry
+                            if (intersection) {
+                                totalBuildableArea += turf.area(intersection);
+                                primaryZone = type;
+                                allZones.add(label || type);
+                            }
+                        } catch (err) { }
+                    } else {
+                        try {
+                            const intersection = turf.intersect(parcelPoly, zoneFeat);
+                            if (intersection) {
+                                allZones.add(label || type);
+                                if (primaryZone === "Unknown") primaryZone = type;
+                            }
+                        } catch (e) { }
+                    }
+                }
+
+                // --- FINAL LOGIC ADJUSTMENT ---
+                // If we found Features, but Intersection resulted in 0 area (Mismatch/Gap),
+                // OR if the zone found was not buildable,
+                // BUT the User wants "Estimations", we should check Slope logic again as a "Soft Fallback".
+
+                if (totalBuildableArea < 10) {
+                    // Check if we at least found a Zone Label to report
+                    const zoneFound = primaryZone !== "Unknown" ? primaryZone : "Unknown";
+
+                    // Run Estimate
+                    const slope = parcelFeature.properties.slope_mean || 0;
+                    const isLikely = slope < 30;
+                    const estArea = isLikely ? Math.round(parcelFeature.properties.total_area_sqm * 0.8) : 0;
+
+                    // If we found a zone (e.g. N - Naturelle) and it's definitely NOT buildable, we should say NO.
+                    // But if Unknown, or if user insists on estimation, we provide context.
+
+                    if (isLikely && zoneFound === "Unknown") {
+                        // Case: Features returned but no intersection (Geometry mismatch). 
+                        // Respond with Estimate.
+                        return {
+                            isBuildable: true,
+                            buildableAreaSqm: estArea,
+                            zone: "Estimated (Geo Mismatch)",
+                            labels: `Keys found: ${availableKeys}`, // Keep debug info
+                            debugKeys: availableKeys
+                        };
+                    }
+                }
+
+                return {
+                    isBuildable: totalBuildableArea > 10,
+                    buildableAreaSqm: Math.round(totalBuildableArea),
+                    zone: primaryZone === "Unknown" ? "Undefined" : primaryZone,
+                    labels: Array.from(allZones).join(", "),
+                    debugKeys: availableKeys
+                };
+
+            } catch (e) {
+                console.error("WFS Error:", e);
+                // Fallback on Error too
+                const slope = parcelFeature.properties.slope_mean || 0;
+                const isLikely = slope < 30;
+                const estArea = isLikely ? Math.round(parcelFeature.properties.total_area_sqm * 0.8) : 0;
+
+                return {
+                    isBuildable: isLikely,
+                    buildableAreaSqm: estArea,
+                    zone: "Estimated (Sys Error)",
+                    labels: "Inferred from Terrain",
+                    error: e.message
+                };
+            }
+        }
+
+        async function askAgent(id) {
+            const btn = document.getElementById('btnAgent');
+            btn.innerHTML = "<div class='loader w-4 h-4 border-2 border-white border-t-transparent animate-spin ml-2'></div> Analyzing Terrain...";
+
+            try {
+                // 1. Server Analysis (Slope, Owner)
+                const res = await fetch('/agent/fetch-parcel-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const json = await res.json();
+
+                if (res.ok) {
+                    btn.innerHTML = "<div class='loader w-4 h-4 border-2 border-white border-t-transparent animate-spin ml-2'></div> Calculating Buildable Area...";
+
+                    // Update Slope
+                    document.getElementById('pSlope').innerText = json.slope + "% (Agent)";
+
+                    // 2. Client Analysis (Zoning Intersection)
+                    // We need the geometry of the parcel. checking parcelsData
+                    const feature = parcelsData.features.find(f => f.properties.id === id);
+
+                    if (feature) {
+                        // UPDATE MEMORY
+                        feature.properties.slope_mean = json.slope;
+                        feature.properties.address = json.address;
+                        feature.properties.est_price_m2 = json.est_price_m2;
+                        feature.properties.dist_to_hub = json.dist_to_hub;
+                        feature.properties.owner_status = json.owner_status;
+                        feature.properties.owner_email = json.owner_email;
+
+                        // Force update UI
+                        if (json.address) document.getElementById('pEnrichment').innerHTML = "";
+
+                        const zoning = await fetchZoningIntersection(feature);
+                        let buildHtml = "<span class='text-gray-400'>Unknown</span>"; // Default
+
+                        if (zoning) {
+                            if (zoning.error) {
+                                buildHtml = `<span class='text-red-500 font-bold'>Error: ${zoning.error}</span>`;
+                            } else if (zoning.isBuildable) {
+                                const totalArea = feature.properties.total_area_sqm;
+                                const percent = Math.round((zoning.buildableAreaSqm / totalArea) * 100);
+                                buildHtml = `
+                                <div class='flex flex-col'>
+                                    <span class='text-green-400 font-bold'>YES (${zoning.buildableAreaSqm} m²)</span>
+                                    <span class='text-xs text-gray-400'>${percent}% of plot (Zone ${zoning.zone})</span>
+                                    <span class='text-[10px] text-gray-500 truncate'>${zoning.labels}</span>
+                                </div>`;
+                            } else {
+                                // NOT BUILDABLE
+                                const subText = zoning.zone === "Undefined" ? `Keys found: ${zoning.debugKeys}` : `Zone ${zoning.zone}`;
+                                const color = zoning.zone === "Undefined" ? "text-orange-400" : "text-red-500";
+
+                                let reason = zoning.labels;
+                                if (feature.properties.slope_mean > 30) reason += " (Steep Slope)";
+
+                                buildHtml = `
+                                <div class='flex flex-col'>
+                                    <span class='${color} font-bold'>NO (0 m²)</span>
+                                    <span class='text-[10px] text-gray-400'>${subText}</span>
+                                    <span class='text-[10px] text-gray-500 truncate'>${reason}</span>
+                                </div>`;
+                            }
+
+                            // Save to Memory
+                            feature.properties.buildable_area_sqm = zoning.isBuildable ? zoning.buildableAreaSqm : 0;
+                        }
+
+                        document.getElementById('pBuild').innerHTML = buildHtml;
+                    } else {
+                        document.getElementById('pBuild').innerHTML = "<span class='text-orange-400 font-bold'>Zoning Network Error</span>";
+                    }
+
+
+                    // Handle Owner
+                    if (json.owner_status) {
+                        document.getElementById('pOwner').innerText = json.owner_status;
+
+                        const copyBtn = document.getElementById('btnCopyRequest');
+                        copyBtn.classList.remove('hidden');
+                        copyBtn.innerText = "📋 Copy official request letter";
+                        copyBtn.onclick = () => {
+                            navigator.clipboard.writeText(json.owner_request_text).then(() => {
+                                copyBtn.innerText = "Values Copied to Clipboard!";
+                                setTimeout(() => copyBtn.innerText = "📋 Copy official request letter", 2000);
+                            });
+                        };
+
+                        // Handle Email
+                        if (json.owner_email) {
+                            let emailDiv = document.getElementById('ownerEmailDiv');
+                            if (!emailDiv) {
+                                emailDiv = document.createElement('div');
+                                emailDiv.id = 'ownerEmailDiv';
+                                emailDiv.className = "mt-2 text-xs text-center text-gray-400";
+                                document.getElementById('parcelInfo').appendChild(emailDiv);
+                            }
+                            emailDiv.innerHTML = `Send to: <a href="mailto:${json.owner_email}" class="text-blue-400 hover:underline">${json.owner_email}</a>`;
+                            emailDiv.innerHTML = `Send to: <a href="mailto:${json.owner_email}" class="text-blue-400 hover:underline">${json.owner_email}</a>`;
+                        }
+                    }
+
+                    // Add Google Button
+                    if (json.center_lat) {
+                        let gBtn = document.getElementById('btnGoogle');
+                        if (!gBtn) {
+                            gBtn = document.createElement('a');
+                            gBtn.id = 'btnGoogle';
+                            gBtn.target = "_blank";
+                            gBtn.className = "mt-2 block w-full py-2 bg-gray-700 hover:bg-gray-600 rounded text-xs text-center text-white border border-gray-600";
+                            gBtn.innerText = "🌏 Open in Google Street View";
+                            document.getElementById('parcelInfo').appendChild(gBtn);
+                        }
+                        gBtn.href = `https://www.google.com/maps?q=&layer=c&cbll=${json.center_lat},${json.center_lon}`;
+                    }
+
+                    btn.innerText = "Analysis Complete";
+                    loadData();
+
+                } else {
+                    btn.innerText = "Agent Failed";
+                    alert("Agent Error: " + json.error);
+                }
+            } catch (e) {
+                btn.innerText = "Network Error";
+                alert(e);
+            }
+        }
+
+        // Clear copy button on selection change
+        function clearCopyBtn() {
+            const btn = document.getElementById('btnCopyRequest');
+            if (btn) btn.classList.add('hidden');
+        }
+
+        // --- RECOMMENDATION SYSTEM ---
+        function openRecModal() {
+            document.getElementById('recModal').classList.remove('hidden');
+            findBestLands(); // Auto-load
+        }
+        function closeRecModal() {
+            document.getElementById('recModal').classList.add('hidden');
+        }
+
+        function findBestLands(resetQueue = true) {
+            if (!parcelsData) return;
+
+            // If user typed, we might want to reset queue or keep it. 
+            // Usually we clear queue on new search criteria to prioritize new matches.
+            if (resetQueue) {
+                analysisQueue = [];
+                // We don't stop current analysis, just clear pending
+            }
+
+            const minArea = parseFloat(document.getElementById('recMinArea').value) || 0;
+            const maxArea = parseFloat(document.getElementById('recMaxArea').value) || 99999999;
+            const maxSlope = parseFloat(document.getElementById('recMaxSlope').value) || 100;
+
+            // 1. Calculate Global Median Price/m2 from knowns
+            const knownPrices = parcelsData.features
+                .map(f => f.properties.est_price_m2)
+                .filter(p => p !== undefined && p !== null);
+
+            let globalMedianPrice = 150; // Default fallback
+            if (knownPrices.length > 0) {
+                knownPrices.sort((a, b) => a - b);
+                globalMedianPrice = knownPrices[Math.floor(knownPrices.length / 2)];
+            }
+
+            // Score and Filter
+            const results = parcelsData.features
+                .map(f => {
+                    const area = f.properties.total_area_sqm || 0;
+                    let slope = f.properties.slope_mean;
+
+                    // Parse Slope safely
+                    if (slope !== null && slope !== undefined && slope !== "N/A") {
+                        slope = parseFloat(slope);
+                    } else {
+                        slope = null; // Mark as unknown
+                    }
+
+                    // Filter Hard Constraints
+                    if (area < minArea) return null;
+                    if (area > maxArea) return null;
+
+                    // Only filter slope if we actually KNOW it
+                    if (slope !== null && slope > maxSlope) return null;
+
+                    // --- SCORING ENGINE ---
+                    // Weighted approach: Accessibility + Price + Validity
+
+                    let score = 10;
+
+                    // 1. Slope Score (Max 4 pts)
+                    // 0% slope = 4 pts. 30% slope = 0 pts.
+                    if (slope !== null) {
+                        const sScore = Math.max(0, 4 - (slope / 7.5));
+                        score += sScore;
+                    } else {
+                        score -= 2; // Penalty for unknown
+                    }
+
+                    // 2. Accessibility Score (Distance to Olympe) (Max 5 pts)
+                    // 0m = 5 pts. 2000m = 0 pts.
+                    const dist = f.properties.dist_to_hub;
+                    if (dist) {
+                        const dScore = Math.max(0, 5 - (dist / 400));
+                        score += dScore;
+                    } else {
+                        score -= 1; // Unknown distance
+                    }
+
+                    // 3. Price Score (Value) (Max 5 pts)
+                    // Cheap = Good. <100 eur/m2 = 5pts. >1000 = 0.
+                    // If unknown, use Global Median calculation but add slight uncertainly penalty.
+                    let priceVal = f.properties.est_price_m2 || globalMedianPrice;
+                    f.properties.projected_price_m2 = priceVal; // Store for display
+                    f.properties.is_projected_price = !f.properties.est_price_m2;
+
+                    const pScore = Math.max(0, 5 - (priceVal / 200));
+                    score += pScore;
+
+                    // Area Bonus (Small)
+                    if (area > 1000) score += 1;
+
+                    return { feature: f, score: score, slopeVal: slope };
+                })
+                .filter(item => item !== null)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 100); // Top 100
+
+            renderRecResults(results);
+
+            // Queue Up Unknowns for Analysis (Top 20 to avoid spamming)
+            const candidates = results
+                .filter(r => r.slopeVal === null)
+                .slice(0, 20)
+                .map(r => r.feature.properties.id);
+
+            // Add unique to queue
+            let added = false;
+            candidates.forEach(id => {
+                if (!analysisQueue.includes(id)) {
+                    analysisQueue.push(id);
+                    added = true;
+                }
+            });
+
+            if (added && !isAnalyzing) {
+                processAnalysisQueue();
+            }
+        }
+
+        function renderRecResults(results) {
+            const container = document.getElementById('recResults');
+            container.innerHTML = "";
+            container.classList.remove('hidden');
+
+            if (results.length === 0) {
+                container.innerHTML = "<div class='text-gray-400 text-xs text-center'>No matching lands found.</div>";
+                return;
+            }
+
+            results.forEach((item, idx) => {
+                const f = item.feature;
+                const p = f.properties;
+                const el = document.createElement('div');
+                el.className = "flex justify-between items-center bg-gray-800 p-2 rounded hover:bg-gray-700 cursor-pointer border border-gray-700";
+                el.onclick = () => {
+                    selectParcel(f);
+                    closeRecModal();
+
+                    // Fly to it (On Top)
+                    if (window.turf) {
+                        const bbox = turf.bbox(f);
+                        map.fitBounds(bbox, {
+                            padding: 100,
+                            maxZoom: 19,
+                            pitch: 0, // Top-down view
+                            bearing: 0 // North up
+                        });
+                    } else {
+                        // Fallback if turf not ready
+                        if (f.geometry.type === 'MultiPolygon' || f.geometry.type === 'Polygon') {
+                            const coords = f.geometry.coordinates[0][0][0] ? f.geometry.coordinates[0][0][0] : f.geometry.coordinates[0][0];
+                            map.flyTo({ center: coords, zoom: 18, pitch: 0 });
+                        }
+                    }
+                };
+
+                const areaDisplay = Math.round(p.total_area_sqm) + " m²";
+
+                let slopeDisplay = "<span class='text-gray-500'>Slope: ?</span>";
+                if (item.slopeVal !== null) {
+                    slopeDisplay = `<span class='text-green-400'>Slope: ${Math.round(item.slopeVal)}%</span>`;
+                }
+
+                let subDetails = "";
+                if (p.address) subDetails += `<div class='truncate text-gray-500'>${p.address}</div>`;
+                if (p.dist_to_hub) subDetails += `<div class='text-gray-500'>${p.dist_to_hub}m to Olympe</div>`;
+
+                // Price Estimate (Real or Projected)
+                const priceM2 = p.est_price_m2 || p.projected_price_m2;
+                if (priceM2) {
+                    const totalEst = (priceM2 * p.total_area_sqm) / 1000; // kEUR
+
+                    if (!p.is_projected_price) {
+                        // Real DVF
+                        const priceColor = priceM2 < 200 ? 'text-green-400' : 'text-yellow-400';
+                        subDetails += `<div class='${priceColor} font-bold'>€${priceM2}/m² (~€${Math.round(totalEst)}k)</div>`;
+                    } else {
+                        // Projected
+                        subDetails += `<div class='text-gray-600 italic'>Est. ~€${priceM2}/m² (Projected)</div>`;
+                    }
+                }
+
+                el.innerHTML = `
+                    <div class="flex gap-3 items-center w-full overflow-hidden">
+                        <div class="text-xl font-bold text-gray-600 font-mono">#${idx + 1}</div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold text-white">#${p.id}</div>
+                            <div class="text-xs text-gray-400">${areaDisplay} • ${slopeDisplay}</div>
+                            <div class="text-[10px] mt-1">${subDetails}</div>
+                        </div>
+                    </div>
+                    <div class="text-xs font-mono text-blue-400 whitespace-nowrap pl-2">
+                        ${Math.round(item.score * 10) / 10}
+                    </div>
+                `; container.appendChild(el);
+            });
+        }
+
+        // --- PROACTIVE AGENT QUEUE ---
+        async function processAnalysisQueue() {
+            if (isAnalyzing || analysisQueue.length === 0) return;
+
+            isAnalyzing = true;
+            const statusDiv = document.getElementById('recStatus');
+
+            while (analysisQueue.length > 0) {
+                // Check if modal is still open (stop if closed)
+                if (document.getElementById('recModal').classList.contains('hidden')) {
+                    analysisQueue = []; // Clear queue
+                    break;
+                }
+
+                const id = analysisQueue.shift();
+                console.log("Agent Proactive Analysis for:", id);
+
+                // Show status
+                if (statusDiv) statusDiv.innerText = `Agent analyzing parcel #${id}...`;
+
+                try {
+                    // Reuse Server API
+                    const res = await fetch('/agent/fetch-parcel-data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: id })
+                    });
+
+                    if (res.ok) {
+                        const json = await res.json();
+                        // Update Data Model
+                        const feature = parcelsData.features.find(f => f.properties.id === id);
+                        if (feature && json.slope !== null) {
+                            feature.properties.slope_mean = json.slope; // Update in memory
+
+                            // Re-run Search (Silent update)
+                            // We don't want to reset the view, just re-render list
+                            findBestLands(false);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Proactive Error", e);
+                }
+
+                // Small delay to be nice to server
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            isAnalyzing = false;
+            if (statusDiv) statusDiv.innerText = "";
+        }
+
+        function selectRec(id) {
+            closeRecModal();
+            const feature = parcelsData.features.find(f => f.properties.id === id);
+            if (feature) {
+                selectParcel(feature);
+                // Zoom to feature
+                const bbox = turf.bbox(feature);
+                map.fitBounds(bbox, { padding: 100 });
+            }
+        }
+
+
+
+
+    </script>
+
+    <!-- MISSING TOUR LOGIC -->
+    <script>
+        // Tour & Welcome Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check Welcome on load
+            setTimeout(() => {
+                if (!localStorage.getItem('sawWelcome_v1')) {
+                    document.getElementById('welcomeModal').classList.remove('hidden');
+                }
+            }, 1000);
+        });
+
+        function closeWelcomeModal() {
+            document.getElementById('welcomeModal').classList.add('hidden');
+            localStorage.setItem('sawWelcome_v1', 'true');
+        }
+
+        function startTour() {
+            closeWelcomeModal();
+            // Ensure Driver is loaded
+            if (!window.driver) {
+                console.error("Driver.js not loaded");
+                alert("Tour library loading... please wait a moment and try again.");
+                return;
+            }
+            const driver = window.driver.js.driver;
+
+            const driverObj = driver({
+                showProgress: true,
+                steps: [
+                    { element: '#sidebar', popover: { title: 'Control Panel', description: 'This is your command center. Use the Search filters and view parcel details here.' } },
+                    { element: '#recModalBtn', popover: { title: 'Recommendation Engine', description: 'Click "Find Best Land" to let the AI find the best opportunities based on your criteria.' } },
+                    { element: '#map', popover: { title: 'Smart Map', description: 'Click on any parcel on the map to see its details. Green borders indicate parcels that have already been analyzed.' } }
+                ]
+            });
+
+            driverObj.drive();
+        }
+    </script>
+</body>
+
+</html>

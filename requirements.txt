@@ -1,0 +1,10 @@
+flask
+flask-cors
+geopandas
+pandas
+shapely
+requests
+gunicorn
+rasterio
+rasterstats
+fiona
